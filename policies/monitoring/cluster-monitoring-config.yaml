@@ -1,0 +1,89 @@
+# Custom cluster-monitoring-config.
+# Adapted from brian-jarvis/bry-acm-policy-samples
+# policies/cluster-configs/monitoring/cluster-monitoring-config-mcoa.yml
+# (implement-perses-dashboards). ACM 5.0 default observability is not created here.
+object-templates-raw: |
+  {{- $current_cm := (lookup "v1" "ConfigMap" "openshift-monitoring" "cluster-monitoring-config") }}
+
+  ## The base_config is the customer expected config.  This should not include ACM required details.
+  ## nodeSelector and tolerations will be applied further down the policy
+  {{- $base_config := `
+    alertmanagerMain:
+      enableUserAlertmanagerConfig: true
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 10Gi
+          storageClassName: gp3-csi
+
+    enableUserWorkload: true
+
+    prometheusK8s:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 2Gi
+      retention: 7d
+      retentionSize: 100GB
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: gp3-csi
+  ` }}
+
+  ## optionally add additional external labels
+  {{- $ex_labels := (dict
+        "prometheusK8s" (dict
+          "externalLabels" (dict
+            "instance_name" (split "." (lookup "config.openshift.io/v1" "Infrastructure" "" "cluster").status.apiServerURL)._1
+            "product" (fromClusterClaim "product.open-cluster-management.io")
+          )
+        )
+      )
+  }}
+
+  ## merge the user config ontop of the existing cluster config
+  {{ $rendered_config := merge ($base_config | fromYaml) $ex_labels ((dig "data" "config.yaml" "{}" $current_cm) | fromYaml) }}
+
+  ## set nodeSelector and tolerations for each key
+  {{- $keys := (list "alertmanagerMain" "prometheusK8s" "prometheusOperator" "kubeStateMetrics" "openshiftStateMetrics" "telemeterClient" "thanosQuerier") }}
+  {{- range $key := $keys }}
+    {{- $node_selector := (dict
+          $key (dict
+            "nodeSelector" (dict
+              (printf "node-role.kubernetes.io/%s" (hasNodesWithExactRoles "infra" "storage" | ternary "infra" "worker")) ""
+            )
+          )
+        )
+    }}
+    {{- $node_tolerations := (dict) }}
+    {{- if (hasNodesWithExactRoles "infra") }}
+      {{- $node_tolerations = (dict
+            $key (dict
+              "tolerations" (list
+                (dict
+                  "operator" "Exists"
+                  "key" "node-role.kubernetes.io/infra"
+                )
+              )
+            )
+          )
+      }}
+    {{- end }}
+    {{- $rendered_config = merge $node_selector $node_tolerations $rendered_config }}
+  {{- end }}
+
+  - complianceType: musthave
+    recordDiff: InStatus
+    objectDefinition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cluster-monitoring-config
+        namespace: openshift-monitoring
+      data:
+        config.yaml: |
+          {{ $rendered_config | toYaml | autoindent }}

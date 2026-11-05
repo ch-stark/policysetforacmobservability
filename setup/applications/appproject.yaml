@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: acm-observability-policies
+  namespace: openshift-gitops
+spec:
+  description: Generate custom ACM observability Policies from this git repo into namespace policies.
+  sourceRepos:
+    - https://github.com/ch-stark/policysetforacmobservability
+    - https://github.com/ch-stark/policysetforacmobservability.git
+  destinations:
+    - namespace: policies
+      server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

@@ -1,0 +1,93 @@
+# Custom user-workload-monitoring-config.
+# Adapted from brian-jarvis/bry-acm-policy-samples
+# policies/cluster-configs/monitoring/user-workload-monitoring-config-mcoa.yml
+# (implement-perses-dashboards).
+object-templates-raw: |
+  {{- $current_cm := (lookup "v1" "ConfigMap" "openshift-user-workload-monitoring" "user-workload-monitoring-config") }}
+
+  ## The base_config is the customer expected config.  This should not include ACM required details.
+  ## nodeSelector and tolerations will be applied further down the policy
+  {{- $base_config := `
+    prometheus:
+      retention: 7d
+      retentionSize: 100GB
+      resources:
+        requests:
+          cpu: 200m
+          memory: 2Gi
+
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: gp3-csi
+
+    thanosRuler:
+      retention: 7d
+      resources:
+        requests:
+          cpu: 200m
+          memory: 2Gi
+
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: gp3-csi
+  ` }}
+
+  ## optionally add additional external labels
+  {{- $ex_labels := (dict
+        "prometheus" (dict
+          "externalLabels" (dict
+            "instance_name" (split "." (lookup "config.openshift.io/v1" "Infrastructure" "" "cluster").status.apiServerURL)._1
+            "product" (fromClusterClaim "product.open-cluster-management.io")
+          )
+        )
+      )
+  }}
+
+  ## merge the user config ontop of the existing cluster config
+  {{ $rendered_config := merge ($base_config | fromYaml) $ex_labels ((dig "data" "config.yaml" "{}" $current_cm) | fromYaml) }}
+
+  ## set nodeSelector and tolerations for each key
+  {{- $keys := (list "prometheusOperator" "thanosRuler" "prometheus") }}
+  {{- range $key := $keys }}
+    {{- $node_selector := (dict
+          $key (dict
+            "nodeSelector" (dict
+              (printf "node-role.kubernetes.io/%s" (hasNodesWithExactRoles "infra" "storage" | ternary "infra" "worker")) ""
+            )
+          )
+        )
+    }}
+    {{- $node_tolerations := (dict) }}
+    {{- if (hasNodesWithExactRoles "infra") }}
+      {{- $node_tolerations = (dict
+            $key (dict
+              "tolerations" (list
+                (dict
+                  "operator" "Exists"
+                  "key" "node-role.kubernetes.io/infra"
+                )
+              )
+            )
+          )
+      }}
+    {{- end }}
+    {{- $rendered_config = merge $node_selector $node_tolerations $rendered_config }}
+  {{- end }}
+
+  - complianceType: musthave
+    recordDiff: InStatus
+    objectDefinition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: user-workload-monitoring-config
+        namespace: openshift-user-workload-monitoring
+      data:
+        config.yaml: |
+          {{ $rendered_config | toYaml | autoindent }}

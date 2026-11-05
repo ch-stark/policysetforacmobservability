@@ -1,0 +1,49 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: acm-observability-custom
+policyDefaults:
+  namespace: policies
+  remediationAction: enforce
+  consolidateManifests: false
+  severity: low
+  categories:
+    - CM Configuration Management
+  controls:
+    - CM-2 Baseline Configuration
+  standards:
+    - NIST SP 800-53
+policies:
+  - name: policy-custom-cluster-monitoring
+    description: >-
+      Custom OpenShift cluster and user-workload monitoring config.
+      Default ACM observability is not installed by this policy.
+    policySets:
+      - custom-cluster-monitoring
+    manifests:
+      - path: monitoring/cluster-monitoring-config.yaml
+        name: cluster-monitoring-config
+      - path: monitoring/user-workload-monitoring-config.yaml
+        name: user-workload-monitoring-config
+  - name: policy-custom-metrics-scrapeconfig
+    description: >-
+      Example custom ScrapeConfig on the hub. MCOA selects it by label and
+      the placements annotation. This policy does not edit ClusterManagementAddOn.
+    policySets:
+      - custom-metrics-scrapeconfig
+    manifests:
+      - path: observability/custom-scrapeconfig.yaml
+        name: example-custom-metrics
+        complianceType: musthave
+policySets:
+  - name: custom-cluster-monitoring
+    description: Custom monitoring ConfigMaps for clusters in the global set.
+    placement:
+      name: placement-custom-monitoring
+  - name: custom-metrics-scrapeconfig
+    description: Hub-only custom ScrapeConfig. Requires default ACM observability.
+    placement:
+      name: placement-custom-scrapeconfig
+      labelSelector:
+        matchLabels:
+          local-cluster: "true"

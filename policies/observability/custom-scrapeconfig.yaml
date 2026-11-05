@@ -1,0 +1,19 @@
+# Example custom metric for the fleet collector.
+# Replace spec.params.match[] before use. MCOA copies this object onto placements
+# named by the annotation. It fills platform scheme, scrape class, and targets.
+apiVersion: monitoring.rhobs/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: example-custom-metrics
+  namespace: open-cluster-management-observability
+  labels:
+    app.kubernetes.io/part-of: multicluster-observability-addon
+    app.kubernetes.io/component: platform-metrics-collector
+  annotations:
+    observability.open-cluster-management.io/placements: open-cluster-management-observability/global
+spec:
+  jobName: example-custom-metrics
+  metricsPath: /federate
+  params:
+    match[]:
+      - '{__name__="alertmanager_alerts"}'

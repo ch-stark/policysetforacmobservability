@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: acm-observability-policies
+  namespace: openshift-gitops
+spec:
+  project: acm-observability-policies
+  destination:
+    namespace: policies
+    server: https://kubernetes.default.svc
+  source:
+    path: policies
+    repoURL: https://github.com/ch-stark/policysetforacmobservability.git
+    targetRevision: main
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      selfHeal: false
+      prune: true
