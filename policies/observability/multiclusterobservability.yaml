@@ -1,0 +1,42 @@
+# Patch the hub MultiClusterObservability named observability.
+# ACM 5.0 creates that object. This template does not create it and does not
+# set storageConfig, logs, traces, or OpenTelemetry.
+# Adapted from brian-jarvis/bry-acm-policy-samples
+# policies/acm-configs/observability/observability.yml (implement-perses-dashboards).
+object-templates-raw: |
+  {{- $mco := lookup "observability.open-cluster-management.io/v1beta2" "MultiClusterObservability" "" "observability" }}
+  {{- if dig "metadata" "name" "" $mco }}
+  - complianceType: musthave
+    recordDiff: InStatus
+    objectDefinition:
+      apiVersion: observability.open-cluster-management.io/v1beta2
+      kind: MultiClusterObservability
+      metadata:
+        name: observability
+      spec:
+        capabilities:
+          platform:
+            analytics:
+              namespaceRightSizingRecommendation:
+                enabled: true
+              virtualizationRightSizingRecommendation:
+                enabled: true
+            metrics:
+              alerts:
+                enabled: true
+              default:
+                enabled: true
+              ui:
+                enabled: true
+          userWorkloads:
+            metrics:
+              alerts:
+                enabled: true
+              default:
+                enabled: true
+        nodeSelector:
+          node-role.kubernetes.io/{{ hasNodesWithExactRoles "infra" | ternary "infra" "worker" }}: ""
+        tolerations:
+          - key: node-role.kubernetes.io/infra
+            operator: Exists
+  {{- end }}

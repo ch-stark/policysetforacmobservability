@@ -35,6 +35,15 @@ policies:
       - path: observability/custom-scrapeconfig.yaml
         name: example-custom-metrics
         complianceType: musthave
+  - name: policy-patch-multiclusterobservability
+    description: >-
+      Patches the existing hub MultiClusterObservability. Does not create it
+      and does not set object storage.
+    policySets:
+      - patch-multiclusterobservability
+    manifests:
+      - path: observability/multiclusterobservability.yaml
+        name: patch-multiclusterobservability
 policySets:
   - name: custom-cluster-monitoring
     description: Custom monitoring ConfigMaps for clusters in the global set.
@@ -44,6 +53,13 @@ policySets:
     description: Hub-only custom ScrapeConfig. Requires default ACM observability.
     placement:
       name: placement-custom-scrapeconfig
+      labelSelector:
+        matchLabels:
+          local-cluster: "true"
+  - name: patch-multiclusterobservability
+    description: Hub-only patch of MultiClusterObservability/observability.
+    placement:
+      name: placement-patch-mco
       labelSelector:
         matchLabels:
           local-cluster: "true"
